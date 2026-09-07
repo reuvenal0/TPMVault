@@ -2,8 +2,27 @@
 using System.Security.Cryptography;
 
 // Change this value to switch between software and TPM.
-KeyBackend backend = KeyBackend.Tpm;
+KeyBackend backend;
 
+if (args.Length == 0)
+{
+    backend = KeyBackend.Tpm;
+}
+else if (args[0].Equals("software", StringComparison.OrdinalIgnoreCase))
+{
+    backend = KeyBackend.Software;
+}
+else if (args[0].Equals("tpm", StringComparison.OrdinalIgnoreCase))
+{
+    backend = KeyBackend.Tpm;
+}
+else
+{
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  dotnet run -- software");
+    Console.WriteLine("  dotnet run -- tpm");
+    return;
+}
 // Use a different persistent key name for each backend.
 string keyName = backend switch
 {
