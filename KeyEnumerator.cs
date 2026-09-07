@@ -4,17 +4,21 @@ using System.Security.Cryptography;
 namespace TPMVault;
 
 /// <summary>
-/// Enumerates persistent keys from a Windows CNG key storage provider.
+/// Enumerates persistent keys from a Windows CNG provider.
 /// </summary>
 public sealed class KeyEnumerator
 {
     public IReadOnlyList<StoredKeyInfo> Enumerate(
         CngProvider provider)
     {
-        var keys = new List<StoredKeyInfo>();
+        var keys =
+            new List<StoredKeyInfo>();
 
-        IntPtr providerHandle = IntPtr.Zero;
-        IntPtr enumState = IntPtr.Zero;
+        IntPtr providerHandle =
+            IntPtr.Zero;
+
+        IntPtr enumState =
+            IntPtr.Zero;
 
         int status =
             NativeMethods.NCryptOpenStorageProvider(
@@ -32,7 +36,8 @@ public sealed class KeyEnumerator
         {
             while (true)
             {
-                IntPtr keyInfoPointer = IntPtr.Zero;
+                IntPtr keyInfoPointer =
+                    IntPtr.Zero;
 
                 status =
                     NativeMethods.NCryptEnumKeys(
@@ -42,7 +47,8 @@ public sealed class KeyEnumerator
                         ref enumState,
                         0);
 
-                if (status == NativeMethods.NteNoMoreItems)
+                if (status ==
+                    NativeMethods.NteNoMoreItems)
                 {
                     break;
                 }
@@ -61,11 +67,13 @@ public sealed class KeyEnumerator
                                 keyInfoPointer);
 
                     string name =
-                        Marshal.PtrToStringUni(nativeKey.Name)
+                        Marshal.PtrToStringUni(
+                            nativeKey.Name)
                         ?? "<unknown>";
 
                     string algorithm =
-                        Marshal.PtrToStringUni(nativeKey.Algorithm)
+                        Marshal.PtrToStringUni(
+                            nativeKey.Algorithm)
                         ?? "<unknown>";
 
                     keys.Add(
@@ -75,7 +83,6 @@ public sealed class KeyEnumerator
                 }
                 finally
                 {
-                    // NCryptEnumKeys allocates this buffer for each result.
                     if (keyInfoPointer != IntPtr.Zero)
                     {
                         NativeMethods.NCryptFreeBuffer(
@@ -86,15 +93,16 @@ public sealed class KeyEnumerator
         }
         finally
         {
-            // Release the native enumeration state and provider handle.
             if (enumState != IntPtr.Zero)
             {
-                NativeMethods.NCryptFreeBuffer(enumState);
+                NativeMethods.NCryptFreeBuffer(
+                    enumState);
             }
 
             if (providerHandle != IntPtr.Zero)
             {
-                NativeMethods.NCryptFreeObject(providerHandle);
+                NativeMethods.NCryptFreeObject(
+                    providerHandle);
             }
         }
 

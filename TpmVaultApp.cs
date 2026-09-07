@@ -10,12 +10,14 @@ public sealed class TpmVaultApp
     private readonly KeyManager _keyManager;
     private readonly CryptoDemoService _cryptoDemoService;
     private readonly KeyEnumerator _keyEnumerator;
+    private readonly VaultService _vaultService;
 
     public TpmVaultApp()
     {
         _keyManager = new KeyManager();
         _cryptoDemoService = new CryptoDemoService();
         _keyEnumerator = new KeyEnumerator();
+        _vaultService = new VaultService();
     }
 
     public int Run(string[] args)
@@ -28,29 +30,19 @@ public sealed class TpmVaultApp
                 return 0;
             }
 
-            string command = args[0].ToLowerInvariant();
+            string command =
+                args[0].ToLowerInvariant();
 
-            switch (command)
+            return command switch
             {
-                case "software":
-                    RunBackend(KeyBackend.Software);
-                    return 0;
-
-                case "tpm":
-                    RunBackend(KeyBackend.Tpm);
-                    return 0;
-
-                case "list":
-                    ListAllKeys();
-                    return 0;
-
-                case "delete":
-                    return HandleDeleteCommand(args);
-
-                default:
-                    PrintUsage();
-                    return 1;
-            }
+                "software" => RunBackendCommand(KeyBackend.Software),
+                "tpm" => RunBackendCommand(KeyBackend.Tpm),
+                "list" => ListCommand(),
+                "delete" => HandleDeleteCommand(args),
+                "put" => HandlePutCommand(args),
+                "get" => HandleGetCommand(args),
+                _ => PrintUsageAndFail()
+            };
         }
         catch (CryptographicException ex)
         {
@@ -59,11 +51,28 @@ public sealed class TpmVaultApp
             Console.WriteLine(ex.Message);
             return 1;
         }
-        catch (ArgumentException ex)
+        catch (Exception ex)
+            when (ex is ArgumentException
+                or InvalidOperationException
+                or IOException
+                or UnauthorizedAccessException
+                or FormatException)
         {
             Console.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private int RunBackendCommand(KeyBackend backend)
+    {
+        RunBackend(backend);
+        return 0;
+    }
+
+    private int ListCommand()
+    {
+        ListAllKeys();
+        return 0;
     }
 
     private void RunBackend(KeyBackend backend)
@@ -85,6 +94,84 @@ public sealed class TpmVaultApp
         PrintKeyInfo(key, configuration);
 
         _cryptoDemoService.Run(key);
+    }
+
+    private int HandlePutCommand(string[] args)
+    {
+        if (args.Length != 3)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        if (!TryParseBackend(
+            args[1],
+            out KeyBackend backend))
+        {
+            Console.WriteLine(
+                "Backend must be 'software' or 'tpm'.");
+            return 1;
+        }
+
+        string name = args[2];
+
+        Console.Write("Enter secret: ");
+        string? secret = Console.ReadLine();
+
+        if (string.IsNullOrEmpty(secret))
+        {
+            Console.WriteLine(
+                "Secret cannot be empty.");
+            return 1;
+        }
+
+        using CngKey key =
+            _keyManager.GetOrCreateKey(backend);
+
+        _vaultService.StoreSecret(
+            name,
+            secret,
+            key,
+            backend);
+
+        Console.WriteLine(
+            $"Secret stored: vault\\{name}.vault");
+
+        return 0;
+    }
+
+    private int HandleGetCommand(string[] args)
+    {
+        if (args.Length != 3)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        if (!TryParseBackend(
+            args[1],
+            out KeyBackend backend))
+        {
+            Console.WriteLine(
+                "Backend must be 'software' or 'tpm'.");
+            return 1;
+        }
+
+        string name = args[2];
+
+        using CngKey key =
+            _keyManager.GetOrCreateKey(backend);
+
+        string secret =
+            _vaultService.LoadSecret(
+                name,
+                key,
+                backend);
+
+        Console.WriteLine(
+            $"Secret: {secret}");
+
+        return 0;
     }
 
     private void ListAllKeys()
@@ -211,6 +298,12 @@ public sealed class TpmVaultApp
             $"Provider:  {key.Provider}");
     }
 
+    private static int PrintUsageAndFail()
+    {
+        PrintUsage();
+        return 1;
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("Usage:");
@@ -222,5 +315,9 @@ public sealed class TpmVaultApp
             "  dotnet run -- list");
         Console.WriteLine(
             "  dotnet run -- delete <software|tpm> <key-name>");
+        Console.WriteLine(
+            "  dotnet run -- put <software|tpm> <secret-name>");
+        Console.WriteLine(
+            "  dotnet run -- get <software|tpm> <secret-name>");
     }
 }

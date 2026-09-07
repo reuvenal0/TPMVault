@@ -53,7 +53,7 @@ public sealed class KeyManager
                 CngKeyUsages.Decryption
         };
 
-        // Use RSA-2048 for both backends so the comparison is fair.
+        // Use RSA-2048 for both backends so the comparison is consistent.
         creationParameters.Parameters.Add(
             new CngProperty(
                 "Length",

@@ -1,18 +1,6 @@
-# Build results
 bin/
 obj/
-
-# Visual Studio / VS Code
-.vs/
-.vscode/
-
-# User-specific files
+vault/
 *.user
 *.suo
-
-# Logs
-*.log
-
-# Environment variables and secrets
-.env
-.env.*
+.vscode/

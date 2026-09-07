@@ -4,7 +4,7 @@ using System.Text;
 namespace TPMVault;
 
 /// <summary>
-/// Runs the cryptographic demonstrations for the selected key backend.
+/// Runs the cryptographic demonstrations for the selected backend.
 /// </summary>
 public sealed class CryptoDemoService
 {
@@ -48,16 +48,14 @@ public sealed class CryptoDemoService
 
     private static void RunSignatureTest(RSA rsa)
     {
-        // Generate a random 256-bit challenge.
-        byte[] challenge = RandomNumberGenerator.GetBytes(32);
+        byte[] challenge =
+            RandomNumberGenerator.GetBytes(32);
 
-        // Sign the challenge with the private key.
         byte[] signature = rsa.SignData(
             challenge,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
 
-        // Verify the signature with the corresponding public key.
         bool isValid = rsa.VerifyData(
             challenge,
             signature,
@@ -81,24 +79,28 @@ public sealed class CryptoDemoService
 
         const string secret = "My very secret value";
 
-        byte[] plaintext = Encoding.UTF8.GetBytes(secret);
+        byte[] plaintext =
+            Encoding.UTF8.GetBytes(secret);
 
-        // Generate a random 256-bit AES key.
-        byte[] aesKey = RandomNumberGenerator.GetBytes(32);
+        byte[] aesKey =
+            RandomNumberGenerator.GetBytes(32);
 
-        // AES-GCM commonly uses a 96-bit nonce.
-        byte[] nonce = RandomNumberGenerator.GetBytes(12);
+        byte[] nonce =
+            RandomNumberGenerator.GetBytes(12);
 
-        byte[] ciphertext = new byte[plaintext.Length];
+        byte[] ciphertext =
+            new byte[plaintext.Length];
 
-        // Use a 128-bit authentication tag.
-        byte[] tag = new byte[16];
+        byte[] tag =
+            new byte[16];
 
-        byte[] decrypted = new byte[ciphertext.Length];
+        byte[] decrypted =
+            new byte[ciphertext.Length];
 
         try
         {
-            using (var aes = new AesGcm(aesKey, tag.Length))
+            using (var aes =
+                new AesGcm(aesKey, tag.Length))
             {
                 aes.Encrypt(
                     nonce,
@@ -107,7 +109,8 @@ public sealed class CryptoDemoService
                     tag);
             }
 
-            Console.WriteLine($"Original secret:  {secret}");
+            Console.WriteLine(
+                $"Original secret:  {secret}");
             Console.WriteLine(
                 $"Ciphertext:       {Convert.ToHexString(ciphertext)}");
             Console.WriteLine(
@@ -115,7 +118,8 @@ public sealed class CryptoDemoService
             Console.WriteLine(
                 $"Tag:              {Convert.ToHexString(tag)}");
 
-            using (var aes = new AesGcm(aesKey, tag.Length))
+            using (var aes =
+                new AesGcm(aesKey, tag.Length))
             {
                 aes.Decrypt(
                     nonce,
@@ -132,7 +136,6 @@ public sealed class CryptoDemoService
         }
         finally
         {
-            // Clear temporary sensitive data after the demonstration.
             CryptographicOperations.ZeroMemory(aesKey);
             CryptographicOperations.ZeroMemory(plaintext);
             CryptographicOperations.ZeroMemory(decrypted);
