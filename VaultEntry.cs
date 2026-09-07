@@ -1,7 +1,7 @@
 namespace TPMVault;
 
 /// <summary>
-/// Represents the encrypted data stored on disk for a single secret.
+/// Represents the encrypted payload stored on disk for one secret.
 /// </summary>
 public sealed record VaultEntry(
     int Version,

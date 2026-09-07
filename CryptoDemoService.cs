@@ -4,7 +4,7 @@ using System.Text;
 namespace TPMVault;
 
 /// <summary>
-/// Runs the cryptographic demonstrations for the selected backend.
+/// Runs small cryptographic demonstrations for the selected backend.
 /// </summary>
 public sealed class CryptoDemoService
 {
@@ -38,7 +38,6 @@ public sealed class CryptoDemoService
         }
         finally
         {
-            // Clear exported private key material as soon as possible.
             if (privateKey is not null)
             {
                 CryptographicOperations.ZeroMemory(privateKey);

@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 namespace TPMVault;
 
 /// <summary>
-/// Enumerates persistent keys from a Windows CNG provider.
+/// Enumerates persistent keys from a Windows CNG key storage provider.
 /// </summary>
 public sealed class KeyEnumerator
 {

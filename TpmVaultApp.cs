@@ -37,10 +37,13 @@ public sealed class TpmVaultApp
             {
                 "software" => RunBackendCommand(KeyBackend.Software),
                 "tpm" => RunBackendCommand(KeyBackend.Tpm),
-                "list" => ListCommand(),
-                "delete" => HandleDeleteCommand(args),
+                "list" => ListKeysCommand(),
+                "delete" => HandleDeleteKeyCommand(args),
                 "put" => HandlePutCommand(args),
                 "get" => HandleGetCommand(args),
+                "list-secrets" => HandleListSecretsCommand(args),
+                "inspect" => HandleInspectCommand(args),
+                "delete-secret" => HandleDeleteSecretCommand(args),
                 _ => PrintUsageAndFail()
             };
         }
@@ -63,19 +66,21 @@ public sealed class TpmVaultApp
         }
     }
 
-    private int RunBackendCommand(KeyBackend backend)
+    private int RunBackendCommand(
+        KeyBackend backend)
     {
         RunBackend(backend);
         return 0;
     }
 
-    private int ListCommand()
+    private int ListKeysCommand()
     {
         ListAllKeys();
         return 0;
     }
 
-    private void RunBackend(KeyBackend backend)
+    private void RunBackend(
+        KeyBackend backend)
     {
         KeyConfiguration configuration =
             _keyManager.GetConfiguration(backend);
@@ -91,12 +96,15 @@ public sealed class TpmVaultApp
         using CngKey key =
             _keyManager.GetOrCreateKey(backend);
 
-        PrintKeyInfo(key, configuration);
+        PrintKeyInfo(
+            key,
+            configuration);
 
         _cryptoDemoService.Run(key);
     }
 
-    private int HandlePutCommand(string[] args)
+    private int HandlePutCommand(
+        string[] args)
     {
         if (args.Length != 3)
         {
@@ -108,15 +116,16 @@ public sealed class TpmVaultApp
             args[1],
             out KeyBackend backend))
         {
-            Console.WriteLine(
-                "Backend must be 'software' or 'tpm'.");
-            return 1;
+            return PrintInvalidBackend();
         }
 
-        string name = args[2];
+        string name =
+            args[2];
 
         Console.Write("Enter secret: ");
-        string? secret = Console.ReadLine();
+
+        string? secret =
+            Console.ReadLine();
 
         if (string.IsNullOrEmpty(secret))
         {
@@ -135,12 +144,13 @@ public sealed class TpmVaultApp
             backend);
 
         Console.WriteLine(
-            $"Secret stored: vault\\{name}.vault");
+            $"Secret stored: vault\\{backend.ToString().ToLowerInvariant()}\\{name}.vault");
 
         return 0;
     }
 
-    private int HandleGetCommand(string[] args)
+    private int HandleGetCommand(
+        string[] args)
     {
         if (args.Length != 3)
         {
@@ -152,12 +162,11 @@ public sealed class TpmVaultApp
             args[1],
             out KeyBackend backend))
         {
-            Console.WriteLine(
-                "Backend must be 'software' or 'tpm'.");
-            return 1;
+            return PrintInvalidBackend();
         }
 
-        string name = args[2];
+        string name =
+            args[2];
 
         using CngKey key =
             _keyManager.GetOrCreateKey(backend);
@@ -174,9 +183,128 @@ public sealed class TpmVaultApp
         return 0;
     }
 
+    private int HandleListSecretsCommand(
+        string[] args)
+    {
+        if (args.Length != 2)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        if (!TryParseBackend(
+            args[1],
+            out KeyBackend backend))
+        {
+            return PrintInvalidBackend();
+        }
+
+        IReadOnlyList<string> secrets =
+            _vaultService.ListSecrets(backend);
+
+        Console.WriteLine(
+            $"Vault secrets ({backend})");
+
+        Console.WriteLine(
+            "------------------------");
+
+        if (secrets.Count == 0)
+        {
+            Console.WriteLine(
+                "No secrets found.");
+            return 0;
+        }
+
+        foreach (string secretName in secrets)
+        {
+            Console.WriteLine(secretName);
+        }
+
+        return 0;
+    }
+
+    private int HandleInspectCommand(
+        string[] args)
+    {
+        if (args.Length != 3)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        if (!TryParseBackend(
+            args[1],
+            out KeyBackend backend))
+        {
+            return PrintInvalidBackend();
+        }
+
+        VaultEntryMetadata metadata =
+            _vaultService.Inspect(
+                backend,
+                args[2]);
+
+        Console.WriteLine("Vault entry");
+        Console.WriteLine("------------------------");
+        Console.WriteLine(
+            $"Name:           {metadata.Name}");
+        Console.WriteLine(
+            $"Backend:        {metadata.Backend}");
+        Console.WriteLine(
+            $"Version:        {metadata.Version}");
+        Console.WriteLine(
+            $"Ciphertext:     {metadata.CiphertextBytes} bytes");
+        Console.WriteLine(
+            $"Wrapped key:    {metadata.WrappedKeyBytes} bytes");
+        Console.WriteLine(
+            $"Nonce:          {metadata.NonceBytes} bytes");
+        Console.WriteLine(
+            $"Auth tag:       {metadata.TagBytes} bytes");
+
+        return 0;
+    }
+
+    private int HandleDeleteSecretCommand(
+        string[] args)
+    {
+        if (args.Length != 3)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        if (!TryParseBackend(
+            args[1],
+            out KeyBackend backend))
+        {
+            return PrintInvalidBackend();
+        }
+
+        string name =
+            args[2];
+
+        bool deleted =
+            _vaultService.DeleteSecret(
+                backend,
+                name);
+
+        if (!deleted)
+        {
+            Console.WriteLine(
+                $"Secret not found: {name}");
+            return 1;
+        }
+
+        Console.WriteLine(
+            $"Deleted secret: {name}");
+
+        return 0;
+    }
+
     private void ListAllKeys()
     {
-        Console.WriteLine("TPMVault - Stored Keys");
+        Console.WriteLine(
+            "TPMVault - Stored Keys");
         Console.WriteLine();
 
         ListKeysForBackend(
@@ -210,7 +338,8 @@ public sealed class TpmVaultApp
 
         if (keys.Count == 0)
         {
-            Console.WriteLine("No keys found.");
+            Console.WriteLine(
+                "No keys found.");
             return;
         }
 
@@ -221,7 +350,8 @@ public sealed class TpmVaultApp
         }
     }
 
-    private int HandleDeleteCommand(string[] args)
+    private int HandleDeleteKeyCommand(
+        string[] args)
     {
         if (args.Length != 3)
         {
@@ -233,12 +363,11 @@ public sealed class TpmVaultApp
             args[1],
             out KeyBackend backend))
         {
-            Console.WriteLine(
-                "Backend must be 'software' or 'tpm'.");
-            return 1;
+            return PrintInvalidBackend();
         }
 
-        string keyName = args[2];
+        string keyName =
+            args[2];
 
         bool deleted =
             _keyManager.DeleteKey(
@@ -266,7 +395,8 @@ public sealed class TpmVaultApp
             "software",
             StringComparison.OrdinalIgnoreCase))
         {
-            backend = KeyBackend.Software;
+            backend =
+                KeyBackend.Software;
             return true;
         }
 
@@ -274,7 +404,8 @@ public sealed class TpmVaultApp
             "tpm",
             StringComparison.OrdinalIgnoreCase))
         {
-            backend = KeyBackend.Tpm;
+            backend =
+                KeyBackend.Tpm;
             return true;
         }
 
@@ -282,12 +413,21 @@ public sealed class TpmVaultApp
         return false;
     }
 
+    private static int PrintInvalidBackend()
+    {
+        Console.WriteLine(
+            "Backend must be 'software' or 'tpm'.");
+        return 1;
+    }
+
     private static void PrintKeyInfo(
         CngKey key,
         KeyConfiguration configuration)
     {
-        Console.WriteLine("Key information");
-        Console.WriteLine("------------------------");
+        Console.WriteLine(
+            "Key information");
+        Console.WriteLine(
+            "------------------------");
         Console.WriteLine(
             $"Backend:   {configuration.Backend}");
         Console.WriteLine(
@@ -319,5 +459,11 @@ public sealed class TpmVaultApp
             "  dotnet run -- put <software|tpm> <secret-name>");
         Console.WriteLine(
             "  dotnet run -- get <software|tpm> <secret-name>");
+        Console.WriteLine(
+            "  dotnet run -- list-secrets <software|tpm>");
+        Console.WriteLine(
+            "  dotnet run -- inspect <software|tpm> <secret-name>");
+        Console.WriteLine(
+            "  dotnet run -- delete-secret <software|tpm> <secret-name>");
     }
 }

@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace TPMVault;
 
 /// <summary>
-/// Creates, opens, and deletes persistent CNG keys.
+/// Creates, opens, and deletes persistent Windows CNG keys.
 /// </summary>
 public sealed class KeyManager
 {
@@ -53,14 +53,14 @@ public sealed class KeyManager
                 CngKeyUsages.Decryption
         };
 
-        // Use RSA-2048 for both backends so the comparison is consistent.
+        // Keep both backends on the same RSA key size for a fair comparison.
         creationParameters.Parameters.Add(
             new CngProperty(
                 "Length",
                 BitConverter.GetBytes(RsaKeySize),
                 CngPropertyOptions.Persist));
 
-        // The software key is exportable only for demonstration purposes.
+        // The software key is exportable only to demonstrate the difference.
         if (configuration.AllowPrivateKeyExport)
         {
             creationParameters.ExportPolicy =

@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace TPMVault;
 
 /// <summary>
-/// Encrypts, stores, loads, and decrypts vault entries.
+/// Encrypts, stores, loads, inspects, lists, and deletes vault entries.
 /// </summary>
 public sealed class VaultService
 {
@@ -14,11 +14,11 @@ public sealed class VaultService
     private const int NonceSizeBytes = 12;
     private const int TagSizeBytes = 16;
 
-    private readonly string _vaultDirectory;
+    private readonly string _vaultRootDirectory;
 
-    public VaultService(string vaultDirectory = "vault")
+    public VaultService(string vaultRootDirectory = "vault")
     {
-        _vaultDirectory = vaultDirectory;
+        _vaultRootDirectory = vaultRootDirectory;
     }
 
     public void StoreSecret(
@@ -29,7 +29,11 @@ public sealed class VaultService
     {
         ValidateSecretName(name);
 
-        Directory.CreateDirectory(_vaultDirectory);
+        string backendDirectory =
+            GetBackendDirectory(backend);
+
+        Directory.CreateDirectory(
+            backendDirectory);
 
         byte[] plaintext =
             Encoding.UTF8.GetBytes(secret);
@@ -86,13 +90,12 @@ public sealed class VaultService
                     });
 
             File.WriteAllText(
-                GetEntryPath(name),
+                GetEntryPath(backend, name),
                 json,
                 Encoding.UTF8);
         }
         finally
         {
-            // Clear temporary plaintext key material after use.
             CryptographicOperations.ZeroMemory(aesKey);
             CryptographicOperations.ZeroMemory(plaintext);
 
@@ -108,38 +111,8 @@ public sealed class VaultService
         CngKey key,
         KeyBackend backend)
     {
-        ValidateSecretName(name);
-
-        string path =
-            GetEntryPath(name);
-
-        if (!File.Exists(path))
-        {
-            throw new FileNotFoundException(
-                $"Vault entry not found: {name}");
-        }
-
-        string json =
-            File.ReadAllText(path, Encoding.UTF8);
-
         VaultEntry entry =
-            JsonSerializer.Deserialize<VaultEntry>(json)
-            ?? throw new InvalidDataException(
-                "Vault entry could not be parsed.");
-
-        if (entry.Version != VaultVersion)
-        {
-            throw new InvalidDataException(
-                $"Unsupported vault version: {entry.Version}");
-        }
-
-        if (!entry.Backend.Equals(
-            backend.ToString(),
-            StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"This entry was created with the '{entry.Backend}' backend.");
-        }
+            ReadEntry(backend, name);
 
         byte[] wrappedAesKey =
             Convert.FromBase64String(entry.WrappedAesKey);
@@ -154,6 +127,7 @@ public sealed class VaultService
             Convert.FromBase64String(entry.Ciphertext);
 
         byte[]? aesKey = null;
+
         byte[] plaintext =
             new byte[ciphertext.Length];
 
@@ -162,7 +136,7 @@ public sealed class VaultService
             using var rsa =
                 new RSACng(key);
 
-            // Recover the AES key through the persistent RSA private key.
+            // Recover the AES key using the persistent RSA private key.
             aesKey = rsa.Decrypt(
                 wrappedAesKey,
                 RSAEncryptionPadding.OaepSHA256);
@@ -191,14 +165,140 @@ public sealed class VaultService
         }
     }
 
-    private string GetEntryPath(string name)
+    public IReadOnlyList<string> ListSecrets(
+        KeyBackend backend)
+    {
+        string backendDirectory =
+            GetBackendDirectory(backend);
+
+        if (!Directory.Exists(backendDirectory))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory
+            .EnumerateFiles(
+                backendDirectory,
+                "*.vault",
+                SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileNameWithoutExtension)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public VaultEntryMetadata Inspect(
+        KeyBackend backend,
+        string name)
+    {
+        VaultEntry entry =
+            ReadEntry(backend, name);
+
+        byte[] wrappedAesKey =
+            Convert.FromBase64String(entry.WrappedAesKey);
+
+        byte[] nonce =
+            Convert.FromBase64String(entry.Nonce);
+
+        byte[] tag =
+            Convert.FromBase64String(entry.Tag);
+
+        byte[] ciphertext =
+            Convert.FromBase64String(entry.Ciphertext);
+
+        return new VaultEntryMetadata(
+            Name: name,
+            Backend: entry.Backend,
+            Version: entry.Version,
+            CiphertextBytes: ciphertext.Length,
+            WrappedKeyBytes: wrappedAesKey.Length,
+            NonceBytes: nonce.Length,
+            TagBytes: tag.Length);
+    }
+
+    public bool DeleteSecret(
+        KeyBackend backend,
+        string name)
+    {
+        ValidateSecretName(name);
+
+        string path =
+            GetEntryPath(backend, name);
+
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        File.Delete(path);
+        return true;
+    }
+
+    private VaultEntry ReadEntry(
+        KeyBackend backend,
+        string name)
+    {
+        ValidateSecretName(name);
+
+        string path =
+            GetEntryPath(backend, name);
+
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException(
+                $"Vault entry not found: {name}");
+        }
+
+        string json =
+            File.ReadAllText(
+                path,
+                Encoding.UTF8);
+
+        VaultEntry entry =
+            JsonSerializer.Deserialize<VaultEntry>(json)
+            ?? throw new InvalidDataException(
+                "Vault entry could not be parsed.");
+
+        if (entry.Version != VaultVersion)
+        {
+            throw new InvalidDataException(
+                $"Unsupported vault version: {entry.Version}");
+        }
+
+        if (!entry.Backend.Equals(
+            backend.ToString(),
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"This entry belongs to the '{entry.Backend}' backend.");
+        }
+
+        return entry;
+    }
+
+    private string GetEntryPath(
+        KeyBackend backend,
+        string name)
     {
         return Path.Combine(
-            _vaultDirectory,
+            GetBackendDirectory(backend),
             $"{name}.vault");
     }
 
-    private static void ValidateSecretName(string name)
+    private string GetBackendDirectory(
+        KeyBackend backend)
+    {
+        string backendName =
+            backend.ToString().ToLowerInvariant();
+
+        return Path.Combine(
+            _vaultRootDirectory,
+            backendName);
+    }
+
+    private static void ValidateSecretName(
+        string name)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -212,6 +312,13 @@ public sealed class VaultService
         {
             throw new ArgumentException(
                 "Secret name contains invalid file name characters.",
+                nameof(name));
+        }
+
+        if (name is "." or "..")
+        {
+            throw new ArgumentException(
+                "Invalid secret name.",
                 nameof(name));
         }
     }
