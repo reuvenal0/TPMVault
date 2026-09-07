@@ -3,35 +3,59 @@ using System.Security.Cryptography;
 
 const string keyName = "TPMVault.TestKey";
 
+CngProvider provider =
+    CngProvider.MicrosoftPlatformCryptoProvider;
+
 Console.WriteLine("TPMVault - TPM Key Test");
 Console.WriteLine();
 
 try
 {
-    var creationParameters = new CngKeyCreationParameters
+    if (CngKey.Exists(keyName, provider))
     {
-        Provider = CngProvider.MicrosoftPlatformCryptoProvider,
+        Console.WriteLine("Existing TPM key found.");
 
-        KeyUsage =
-            CngKeyUsages.Signing |
-            CngKeyUsages.Decryption
-    };
+        using CngKey key =
+            CngKey.Open(keyName, provider);
 
-    using CngKey key = CngKey.Create(
-        CngAlgorithm.Rsa,
-        keyName,
-        creationParameters);
+        PrintKeyInfo(key);
+    }
+    else
+    {
+        Console.WriteLine("No existing key found.");
+        Console.WriteLine("Creating TPM-backed key...");
 
-    Console.WriteLine("TPM-backed key created successfully.");
-    Console.WriteLine();
+        var creationParameters = new CngKeyCreationParameters
+        {
+            Provider = provider,
 
-    Console.WriteLine($"Key name:  {key.KeyName}");
-    Console.WriteLine($"Algorithm: {key.Algorithm}");
-    Console.WriteLine($"Provider:  {key.Provider}");
+            KeyUsage =
+                CngKeyUsages.Signing |
+                CngKeyUsages.Decryption
+        };
+
+        using CngKey key = CngKey.Create(
+            CngAlgorithm.Rsa,
+            keyName,
+            creationParameters);
+
+        Console.WriteLine("Key created successfully.");
+
+        PrintKeyInfo(key);
+    }
 }
 catch (CryptographicException ex)
 {
-    Console.WriteLine("Failed to create TPM-backed key.");
-    Console.WriteLine();
+    Console.WriteLine("Cryptographic operation failed:");
     Console.WriteLine(ex.Message);
+}
+
+static void PrintKeyInfo(CngKey key)
+{
+    Console.WriteLine();
+    Console.WriteLine("Key information");
+    Console.WriteLine("------------------------");
+    Console.WriteLine($"Name:      {key.KeyName}");
+    Console.WriteLine($"Algorithm: {key.Algorithm}");
+    Console.WriteLine($"Provider:  {key.Provider}");
 }
