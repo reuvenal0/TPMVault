@@ -11,6 +11,8 @@ public sealed class TpmVaultApp
     private readonly CryptoDemoService _cryptoDemoService;
     private readonly KeyEnumerator _keyEnumerator;
     private readonly VaultService _vaultService;
+    private readonly AttestationKeyManager _attestationKeyManager;
+    private readonly AttestationService _attestationService;
 
     public TpmVaultApp()
     {
@@ -18,6 +20,8 @@ public sealed class TpmVaultApp
         _cryptoDemoService = new CryptoDemoService();
         _keyEnumerator = new KeyEnumerator();
         _vaultService = new VaultService();
+        _attestationKeyManager = new AttestationKeyManager();
+        _attestationService = new AttestationService();
     }
 
     public int Run(string[] args)
@@ -44,6 +48,7 @@ public sealed class TpmVaultApp
                 "list-secrets" => HandleListSecretsCommand(args),
                 "inspect" => HandleInspectCommand(args),
                 "delete-secret" => HandleDeleteSecretCommand(args),
+                "attest" => HandleAttestCommand(args),
                 _ => PrintUsageAndFail()
             };
         }
@@ -301,6 +306,88 @@ public sealed class TpmVaultApp
         return 0;
     }
 
+    private int HandleAttestCommand(
+        string[] args)
+    {
+        if (args.Length != 1)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        using CngKey attestationKey =
+            _attestationKeyManager
+                .GetOrCreateKey();
+
+        Console.WriteLine(
+            "TPMVault - TPM Attestation");
+
+        Console.WriteLine(
+            "------------------------");
+
+        Console.WriteLine(
+            $"Key:      {AttestationKeyManager.AttestationKeyName}");
+
+        Console.WriteLine(
+            $"Provider: {attestationKey.Provider}");
+
+        AttestationResult result =
+            _attestationService
+                .CreatePlatformClaim(
+                    attestationKey);
+
+        if (!result.Success)
+        {
+            Console.WriteLine();
+            Console.WriteLine(
+                "Attestation claim creation failed.");
+
+            Console.WriteLine(
+                $"Native status: 0x{result.Status:X8}");
+
+            Console.WriteLine(
+                "The TPM identity key was created, but Windows rejected the platform claim request.");
+
+            return 1;
+        }
+
+        byte[] claim =
+            result.Claim!;
+
+        byte[] nonce =
+            result.Nonce!;
+
+        try
+        {
+            byte[] claimHash =
+                SHA256.HashData(
+                    claim);
+
+            Console.WriteLine();
+            Console.WriteLine(
+                "Platform claim created successfully.");
+
+            Console.WriteLine(
+                $"Claim size: {claim.Length} bytes");
+
+            Console.WriteLine(
+                $"Nonce:      {Convert.ToHexString(nonce)}");
+
+            Console.WriteLine(
+                $"SHA-256:    {Convert.ToHexString(claimHash)}");
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(
+                claim);
+
+            CryptographicOperations.ZeroMemory(
+                nonce);
+        }
+
+        return 0;
+    }
+
     private void ListAllKeys()
     {
         Console.WriteLine(
@@ -465,5 +552,7 @@ public sealed class TpmVaultApp
             "  dotnet run -- inspect <software|tpm> <secret-name>");
         Console.WriteLine(
             "  dotnet run -- delete-secret <software|tpm> <secret-name>");
+        Console.WriteLine(
+            "  dotnet run -- attest");
     }
 }
