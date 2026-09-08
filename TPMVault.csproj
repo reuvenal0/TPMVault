@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="TPMVault.RepositoryRoot" Value="$(MSBuildProjectDirectory)" />
     <Compile Remove="tests/**/*.cs" />
     <PackageReference Include="Microsoft.TSS" Version="2.1.1" />
   </ItemGroup>

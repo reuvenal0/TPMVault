@@ -4,3 +4,4 @@ vault/
 *.user
 *.suo
 .vscode/
+quote.json

@@ -87,4 +87,6 @@ changed = Fixture();
 ((QuoteInfo)changed.Attestation.attested).pcrSelect =
     [new PcrSelection(TpmAlgId.Sha256, new byte[] { 0x95, 0, 0, 0 })];
 Assert(TpmQuoteVerifier.Verify(Sign(changed), nonce).Verified, "equivalent PCR bitmap with zero padding");
-Console.WriteLine($"{passed} software-only checks passed. No TPM connection or key was created.");
+EvidenceSerializationChecks.Run(Fixture, nonce, Assert);
+QuoteEvidenceVerificationChecks.Run(Fixture, nonce, Sign, Assert);
+Console.WriteLine($"{passed} software-only checks passed. No TPM connection or TPM key was created.");

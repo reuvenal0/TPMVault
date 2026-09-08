@@ -52,6 +52,7 @@ public sealed class TpmVaultApp
                 "tpm-info" => HandleTpmReadCommand(args, readPcrs: false),
                 "pcrs" => HandleTpmReadCommand(args, readPcrs: true),
                 "quote" => HandleQuoteCommand(args),
+                "verify-quote" => HandleVerifyQuoteCommand(args),
                 _ => PrintUsageAndFail()
             };
         }
@@ -72,6 +73,24 @@ public sealed class TpmVaultApp
             Console.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static int HandleVerifyQuoteCommand(string[] args)
+    {
+        if (args.Length != 2 || string.IsNullOrWhiteSpace(args[1]))
+        {
+            Console.WriteLine("Usage: dotnet run -- verify-quote <repository-local-file>");
+            return 1;
+        }
+        Console.WriteLine("TPMVault - Quote Verification");
+        Console.WriteLine("-----------------------------\n");
+        Console.WriteLine($"Evidence file: {args[1]}\n");
+        var result = new TpmQuoteEvidenceVerifier().VerifyFile(args[1]);
+        foreach (var check in result.Checks)
+            Console.WriteLine($"{check.Name + ":",-20} {(check.Valid ? "Valid" : "FAILED: " + check.Error)}");
+        Console.WriteLine($"\nQuote evidence:    {(result.Verified ? "VERIFIED" : "FAILED")}");
+        Console.WriteLine("Embedded-key consistency only; external key/TPM trust and freshness are not established.");
+        return result.Verified ? 0 : 1;
     }
 
     private int RunBackendCommand(
@@ -357,7 +376,19 @@ public sealed class TpmVaultApp
 
     private static int HandleQuoteCommand(string[] args)
     {
-        if (args.Length != 1) return PrintUsageAndFail();
+        if (args.Length != 1 && (args.Length != 3 || args[1] != "--output" || string.IsNullOrWhiteSpace(args[2])))
+            return PrintUsageAndFail();
+        var serializer = new TpmQuoteEvidenceSerializer();
+        string? outputPath;
+        try
+        {
+            outputPath = args.Length == 3 ? serializer.ValidateOutputPath(args[2]) : null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Invalid evidence output path: {ex.Message}");
+            return 1;
+        }
         Console.WriteLine("TPMVault - TPM Quote");
         Console.WriteLine("--------------------");
         try
@@ -379,6 +410,19 @@ public sealed class TpmVaultApp
             Console.WriteLine(result.Verified
                 ? "\nTPM quote:        VERIFIED\nLocal TPM Quote verified"
                 : "\nQuote created but verification failed");
+            if (result.Verified && outputPath is not null)
+            {
+                try
+                {
+                    string savedPath = serializer.WriteVerified(evidence, evidence.Nonce, outputPath);
+                    Console.WriteLine($"Evidence saved: {savedPath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Quote verified, but evidence export failed: {ex.Message}");
+                    return 1;
+                }
+            }
             return result.Verified ? 0 : 1;
         }
         catch (Exception ex)
@@ -642,5 +686,7 @@ public sealed class TpmVaultApp
         Console.WriteLine("  dotnet run -- tpm-info");
         Console.WriteLine("  dotnet run -- pcrs");
         Console.WriteLine("  dotnet run -- quote");
+        Console.WriteLine("  dotnet run -- quote --output <repository-local-file>");
+        Console.WriteLine("  dotnet run -- verify-quote <repository-local-file>");
     }
 }
