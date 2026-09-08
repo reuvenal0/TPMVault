@@ -1,8 +1,8 @@
+using TPMVault.Configuration;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 
-namespace TPMVault;
+namespace TPMVault.Vault;
 
 /// <summary>
 /// Encrypts, stores, loads, inspects, lists, and deletes vault entries.
@@ -18,7 +18,16 @@ public sealed class VaultService
 
     public VaultService(string vaultRootDirectory = "vault")
     {
-        _vaultRootDirectory = vaultRootDirectory;
+        _vaultRootDirectory = RepositoryPaths.Resolve(vaultRootDirectory, allowVault: true);
+    }
+
+    /// <summary>Validates a write request without creating a directory, entry, or key.</summary>
+    public void ValidateStoreRequest(string name, string secret, KeyBackend backend)
+    {
+        _ = GetEntryPath(backend, name);
+        ArgumentNullException.ThrowIfNull(secret);
+        if (Encoding.UTF8.GetByteCount(secret) > VaultEntrySerializer.MaximumSecretBytes)
+            throw new ArgumentException("Secret exceeds the 1 MiB UTF-8 limit.");
     }
 
     public void StoreSecret(
@@ -27,7 +36,7 @@ public sealed class VaultService
         CngKey key,
         KeyBackend backend)
     {
-        ValidateSecretName(name);
+        ValidateStoreRequest(name, secret, backend);
 
         string backendDirectory =
             GetBackendDirectory(backend);
@@ -81,13 +90,7 @@ public sealed class VaultService
                 Tag: Convert.ToBase64String(tag),
                 Ciphertext: Convert.ToBase64String(ciphertext));
 
-            string json =
-                JsonSerializer.Serialize(
-                    entry,
-                    new JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    });
+            string json = VaultEntrySerializer.Serialize(entry, backend);
 
             File.WriteAllText(
                 GetEntryPath(backend, name),
@@ -140,6 +143,9 @@ public sealed class VaultService
             aesKey = rsa.Decrypt(
                 wrappedAesKey,
                 RSAEncryptionPadding.OaepSHA256);
+
+            if (aesKey.Length != AesKeySizeBytes)
+                throw new InvalidDataException("Unwrapped Vault key must contain 32 bytes for AES-256.");
 
             using (var aes =
                 new AesGcm(aesKey, TagSizeBytes))
@@ -250,76 +256,34 @@ public sealed class VaultService
                 $"Vault entry not found: {name}");
         }
 
-        string json =
-            File.ReadAllText(
-                path,
-                Encoding.UTF8);
-
-        VaultEntry entry =
-            JsonSerializer.Deserialize<VaultEntry>(json)
-            ?? throw new InvalidDataException(
-                "Vault entry could not be parsed.");
-
-        if (entry.Version != VaultVersion)
-        {
-            throw new InvalidDataException(
-                $"Unsupported vault version: {entry.Version}");
-        }
-
-        if (!entry.Backend.Equals(
-            backend.ToString(),
-            StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"This entry belongs to the '{entry.Backend}' backend.");
-        }
-
-        return entry;
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (stream.Length > VaultEntrySerializer.MaximumFileBytes)
+            throw new InvalidDataException("Vault entry exceeds the 2 MiB file limit.");
+        using var reader = new StreamReader(stream, new UTF8Encoding(false, true));
+        return VaultEntrySerializer.Deserialize(reader.ReadToEnd(), backend);
     }
 
     private string GetEntryPath(
         KeyBackend backend,
         string name)
     {
-        return Path.Combine(
-            GetBackendDirectory(backend),
-            $"{name}.vault");
+        ValidateSecretName(name);
+        string path = RepositoryPaths.Resolve(Path.Combine(GetBackendDirectory(backend), $"{name}.vault"), allowVault: true);
+        RepositoryPaths.RejectLinks(path);
+        return path;
     }
 
-    private string GetBackendDirectory(
-        KeyBackend backend)
+    private string GetBackendDirectory(KeyBackend backend)
     {
-        string backendName =
-            backend.ToString().ToLowerInvariant();
-
-        return Path.Combine(
-            _vaultRootDirectory,
-            backendName);
+        if (!Enum.IsDefined(backend)) throw new ArgumentException("Unsupported key backend.");
+        string path = Path.Combine(_vaultRootDirectory, backend.ToString().ToLowerInvariant());
+        RepositoryPaths.RejectLinks(path);
+        return path;
     }
 
-    private static void ValidateSecretName(
-        string name)
+    private static void ValidateSecretName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException(
-                "Secret name cannot be empty.",
-                nameof(name));
-        }
-
-        if (name.IndexOfAny(
-            Path.GetInvalidFileNameChars()) >= 0)
-        {
-            throw new ArgumentException(
-                "Secret name contains invalid file name characters.",
-                nameof(name));
-        }
-
-        if (name is "." or "..")
-        {
-            throw new ArgumentException(
-                "Invalid secret name.",
-                nameof(name));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        RepositoryPaths.ValidateComponent(name);
     }
 }

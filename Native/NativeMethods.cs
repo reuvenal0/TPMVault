@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace TPMVault;
+namespace TPMVault.Native;
 
 /// <summary>
 /// Native Windows CNG functions and structures required by TPMVault.

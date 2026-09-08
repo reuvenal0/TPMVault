@@ -1,3 +1,10 @@
+using TPMVault.Configuration;
+using TPMVault.Crypto;
+using TPMVault.Native;
+using TPMVault.Vault;
+using TPMVault.Tpm;
+using TPMVault.Tpm.Quote;
+using TPMVault.Tpm.Experimental;
 using System.Security.Cryptography;
 
 namespace TPMVault;
@@ -30,8 +37,8 @@ public sealed class TpmVaultApp
         {
             if (args.Length == 0)
             {
-                RunBackend(KeyBackend.Tpm);
-                return 0;
+                // Showing usage must not silently create a persistent TPM key.
+                return PrintUsageAndFail();
             }
 
             string command =
@@ -39,9 +46,9 @@ public sealed class TpmVaultApp
 
             return command switch
             {
-                "software" => RunBackendCommand(KeyBackend.Software),
-                "tpm" => RunBackendCommand(KeyBackend.Tpm),
-                "list" => ListKeysCommand(),
+                "software" => args.Length == 1 ? RunBackendCommand(KeyBackend.Software) : PrintUsageAndFail(),
+                "tpm" => args.Length == 1 ? RunBackendCommand(KeyBackend.Tpm) : PrintUsageAndFail(),
+                "list" => args.Length == 1 ? ListKeysCommand() : PrintUsageAndFail(),
                 "delete" => HandleDeleteKeyCommand(args),
                 "put" => HandlePutCommand(args),
                 "get" => HandleGetCommand(args),
@@ -67,6 +74,7 @@ public sealed class TpmVaultApp
             when (ex is ArgumentException
                 or InvalidOperationException
                 or IOException
+                or InvalidDataException
                 or UnauthorizedAccessException
                 or FormatException)
         {
@@ -152,7 +160,7 @@ public sealed class TpmVaultApp
         Console.Write("Enter secret: ");
 
         string? secret =
-            Console.ReadLine();
+            ReadSecret();
 
         if (string.IsNullOrEmpty(secret))
         {
@@ -160,6 +168,8 @@ public sealed class TpmVaultApp
                 "Secret cannot be empty.");
             return 1;
         }
+
+        _vaultService.ValidateStoreRequest(name, secret, backend);
 
         using CngKey key =
             _keyManager.GetOrCreateKey(backend);
@@ -174,6 +184,27 @@ public sealed class TpmVaultApp
             $"Secret stored: vault\\{backend.ToString().ToLowerInvariant()}\\{name}.vault");
 
         return 0;
+    }
+
+    private static string? ReadSecret()
+    {
+        if (Console.IsInputRedirected) return Console.ReadLine();
+        var input = new System.Text.StringBuilder();
+        while (true)
+        {
+            ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Enter)
+            {
+                Console.WriteLine();
+                // The resulting immutable string cannot be securely erased in .NET.
+                return input.ToString();
+            }
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (input.Length > 0) input.Length--;
+            }
+            else if (!char.IsControl(key.KeyChar)) input.Append(key.KeyChar);
+        }
     }
 
     private int HandleGetCommand(
@@ -195,8 +226,11 @@ public sealed class TpmVaultApp
         string name =
             args[2];
 
+        // Validate the existing file before opening any persistent key.
+        _vaultService.Inspect(backend, name);
+
         using CngKey key =
-            _keyManager.GetOrCreateKey(backend);
+            _keyManager.GetExistingKey(backend);
 
         string secret =
             _vaultService.LoadSecret(
@@ -449,7 +483,7 @@ public sealed class TpmVaultApp
                 .GetOrCreateKey();
 
         Console.WriteLine(
-            "TPMVault - TPM Attestation");
+            "TPMVault - Experimental CNG Attestation");
 
         Console.WriteLine(
             "------------------------");
@@ -460,6 +494,8 @@ public sealed class TpmVaultApp
         Console.WriteLine(
             $"Provider: {attestationKey.Provider}");
 
+        Console.WriteLine("Status: Experimental / not verified. For local TPM Quote verification, use: quote");
+
         AttestationResult result =
             _attestationService
                 .CreatePlatformClaim(
@@ -469,13 +505,13 @@ public sealed class TpmVaultApp
         {
             Console.WriteLine();
             Console.WriteLine(
-                "Attestation claim creation failed.");
+                "Platform claim creation failed.");
 
             Console.WriteLine(
                 $"Native status: 0x{result.Status:X8}");
 
             Console.WriteLine(
-                "The TPM identity key was created, but Windows rejected the platform claim request.");
+                "The identity-style CNG key was opened/created, but Windows rejected the platform claim request.");
 
             return 1;
         }
@@ -494,7 +530,7 @@ public sealed class TpmVaultApp
 
             Console.WriteLine();
             Console.WriteLine(
-                "Platform claim created successfully.");
+                "Platform claim bytes returned; authenticity has not been verified.");
 
             Console.WriteLine(
                 $"Claim size: {claim.Length} bytes");
@@ -682,7 +718,7 @@ public sealed class TpmVaultApp
         Console.WriteLine(
             "  dotnet run -- delete-secret <software|tpm> <secret-name>");
         Console.WriteLine(
-            "  dotnet run -- attest");
+            "  dotnet run -- attest  (experimental; may create a persistent key)");
         Console.WriteLine("  dotnet run -- tpm-info");
         Console.WriteLine("  dotnet run -- pcrs");
         Console.WriteLine("  dotnet run -- quote");

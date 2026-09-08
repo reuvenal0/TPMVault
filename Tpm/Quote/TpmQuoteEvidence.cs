@@ -1,6 +1,6 @@
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
 /// <summary>In-memory local evidence. No private key or persistent handle is retained.</summary>
 public sealed record TpmQuoteEvidence(

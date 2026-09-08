@@ -1,8 +1,11 @@
+using TPMVault.Tpm.Quote;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Tpm2Lib;
 using TPMVault;
+
+namespace TPMVault.Tests;
 
 internal static class EvidenceSerializationChecks
 {

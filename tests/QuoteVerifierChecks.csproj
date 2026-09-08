@@ -5,9 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <!-- Build TPMVault first. No extra NuGet packages or TPM access for these checks. -->
+  <!-- Build the actual project in the selected configuration; checks never access TPM hardware. -->
   <ItemGroup>
-    <Reference Include="TPMVault" HintPath="../bin/Debug/net10.0-windows/TPMVault.dll" />
-    <Reference Include="TSS.Net" HintPath="../bin/Debug/net10.0-windows/TSS.Net.dll" />
+    <ProjectReference Include="../TPMVault.csproj" />
   </ItemGroup>
 </Project>

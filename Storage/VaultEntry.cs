@@ -1,4 +1,4 @@
-namespace TPMVault;
+namespace TPMVault.Vault;
 
 /// <summary>
 /// Represents the encrypted payload stored on disk for one secret.

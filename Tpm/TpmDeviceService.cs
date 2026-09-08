@@ -1,9 +1,9 @@
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm;
 
 /// <summary>
-/// Read-only TPM 2.0 access through Windows TBS. No simulator or key creation.
+/// Owns Windows TBS access for capability/PCR reads and the internal Quote service.
 /// Instances are used on one thread and own their TBS connection.
 /// </summary>
 public sealed class TpmDeviceService : IDisposable

@@ -1,7 +1,8 @@
+using TPMVault.Crypto;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
-namespace TPMVault;
+namespace TPMVault.Native;
 
 /// <summary>
 /// Enumerates persistent keys from a Windows CNG key storage provider.

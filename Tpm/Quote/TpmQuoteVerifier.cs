@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
 /// <summary>Local verification only; does not establish certificate or device trust.</summary>
 public static class TpmQuoteVerifier

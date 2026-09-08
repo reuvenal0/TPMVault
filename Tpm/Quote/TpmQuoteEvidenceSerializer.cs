@@ -1,13 +1,14 @@
 using System.Buffers.Binary;
-using System.Reflection;
+using TPMVault.Configuration;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
+/// <summary>Exports verified public evidence and validates its portable JSON schema.</summary>
 public sealed class TpmQuoteEvidenceSerializer
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -18,84 +19,30 @@ public sealed class TpmQuoteEvidenceSerializer
         AllowDuplicateProperties = false
     };
 
-    // Anchored at build time, not inferred from an arbitrary caller's current directory.
-    private static readonly string RepositoryRoot = Path.TrimEndingDirectorySeparator(
-        Path.GetFullPath(typeof(TpmQuoteEvidenceSerializer).Assembly
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .Single(a => a.Key == "TPMVault.RepositoryRoot").Value!));
+    public string ValidateOutputPath(string path) => ValidatePath(path, mustExist: false);
 
-    public string ValidateOutputPath(string path)
-        => ValidatePath(path, mustExist: false);
-
-    public string ValidateInputPath(string path)
-        => ValidatePath(path, mustExist: true);
+    public string ValidateInputPath(string path) => ValidatePath(path, mustExist: true);
 
     private static string ValidatePath(string path, bool mustExist)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (path.Split('\\', '/').Any(part => part != "." && part != ".." &&
-                (part.EndsWith(' ') || part.EndsWith('.'))))
-            throw new ArgumentException("Output components cannot end in spaces or dots.");
-        if (path.StartsWith(@"\\", StringComparison.Ordinal) ||
-            path.StartsWith("//", StringComparison.Ordinal))
-            throw new ArgumentException("UNC and device paths are not allowed.");
-
-        string fullPath = Path.GetFullPath(path, RepositoryRoot);
-        if (!fullPath.StartsWith(RepositoryRoot + Path.DirectorySeparatorChar,
-                StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Evidence output must remain inside the repository.");
-
-        string[] parts = Path.GetRelativePath(RepositoryRoot, fullPath)
-            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (string part in parts)
-        {
-            string stem = part.Split('.')[0];
-            if (part.Length == 0 || part.EndsWith('.') || part.EndsWith(' ') ||
-                part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.Contains(':') ||
-                new[] { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" }.Contains(stem, StringComparer.OrdinalIgnoreCase) ||
-                (stem.Length == 4 && (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
-                    stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-                    (char.IsDigit(stem[3]) || "¹²³".Contains(stem[3]))))
-                throw new ArgumentException("Output contains an unsafe filename component.");
-            if (new[] { ".git", ".codex", ".agents", "vault" }.Contains(part, StringComparer.OrdinalIgnoreCase))
-                throw new ArgumentException("Evidence cannot be written into vault or repository-internal directories.");
-        }
-
-        string current = RepositoryRoot;
-        RejectReparsePoint(current);
-        foreach (string directory in parts.SkipLast(1))
-        {
-            current = Path.Combine(current, directory);
-            RejectReparsePoint(current);
-            if (!Directory.Exists(current))
-                throw new DirectoryNotFoundException("Output parent directory must already exist.");
-        }
-
-        // GetAttributes also detects dangling links, unlike File.Exists alone.
+        string fullPath = RepositoryPaths.Resolve(path);
+        RepositoryPaths.RejectLinks(fullPath);
+        if (!Directory.Exists(Path.GetDirectoryName(fullPath)))
+            throw new DirectoryNotFoundException("Evidence parent directory must already exist.");
         try
         {
             var attributes = File.GetAttributes(fullPath);
-            if (mustExist)
-            {
-                if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
-                    throw new ArgumentException("Evidence input must be a regular file, not a link or directory.");
-                return fullPath;
-            }
+            if (!mustExist) throw new IOException("Output already exists; evidence files are never overwritten.");
+            if ((attributes & FileAttributes.Directory) != 0)
+                throw new ArgumentException("Evidence input must be a regular file.");
+            return fullPath;
         }
         catch (FileNotFoundException)
         {
             if (mustExist) throw new FileNotFoundException("Evidence file does not exist.", fullPath);
             return fullPath;
         }
-        throw new IOException("Output already exists; evidence files are never overwritten.");
     }
-
-    private static void RejectReparsePoint(string path)
-    {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new ArgumentException("Output paths cannot pass through a link or junction.");
-    }
-
     public string SerializeVerified(TpmQuoteEvidence evidence, byte[] expectedNonce)
     {
         var verification = TpmQuoteVerifier.Verify(evidence, expectedNonce);

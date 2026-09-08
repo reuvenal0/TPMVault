@@ -1,3 +1,5 @@
+using TPMVault.Tests;
+using TPMVault.Tpm.Quote;
 using System.Security.Cryptography;
 using Tpm2Lib;
 using TPMVault;
@@ -89,4 +91,5 @@ changed = Fixture();
 Assert(TpmQuoteVerifier.Verify(Sign(changed), nonce).Verified, "equivalent PCR bitmap with zero padding");
 EvidenceSerializationChecks.Run(Fixture, nonce, Assert);
 QuoteEvidenceVerificationChecks.Run(Fixture, nonce, Sign, Assert);
+VaultValidationChecks.Run(Assert);
 Console.WriteLine($"{passed} software-only checks passed. No TPM connection or TPM key was created.");

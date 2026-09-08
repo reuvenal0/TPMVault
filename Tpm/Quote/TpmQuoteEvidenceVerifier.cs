@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
 public sealed record TpmQuoteEvidenceVerificationResult(IReadOnlyList<TpmQuoteCheck> Checks)
 {

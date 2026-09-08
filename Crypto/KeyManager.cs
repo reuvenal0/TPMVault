@@ -1,6 +1,7 @@
+using TPMVault.Configuration;
 using System.Security.Cryptography;
 
-namespace TPMVault;
+namespace TPMVault.Crypto;
 
 /// <summary>
 /// Creates, opens, and deletes persistent Windows CNG keys.
@@ -8,6 +9,15 @@ namespace TPMVault;
 public sealed class KeyManager
 {
     private const int RsaKeySize = 2048;
+
+    /// <summary>Opens an existing key; never creates or replaces persistent state.</summary>
+    public CngKey GetExistingKey(KeyBackend backend)
+    {
+        KeyConfiguration configuration = GetConfiguration(backend);
+        if (!CngKey.Exists(configuration.KeyName, configuration.Provider))
+            throw new InvalidOperationException($"Existing {backend} key '{configuration.KeyName}' was not found. No key was created.");
+        return CngKey.Open(configuration.KeyName, configuration.Provider);
+    }
 
     public KeyConfiguration GetConfiguration(KeyBackend backend)
     {

@@ -1,10 +1,11 @@
+using TPMVault.Native;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Experimental;
 
 /// <summary>
-/// Creates a TPM platform claim containing PCR state and a fresh nonce.
+/// Experimental NCryptCreateClaim path; platform claim creation currently returns E_INVALIDARG.
 /// </summary>
 public sealed class AttestationService
 {

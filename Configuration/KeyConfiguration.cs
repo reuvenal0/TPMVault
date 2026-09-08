@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace TPMVault;
+namespace TPMVault.Configuration;
 
 /// <summary>
 /// Holds the Windows CNG configuration for a key backend.

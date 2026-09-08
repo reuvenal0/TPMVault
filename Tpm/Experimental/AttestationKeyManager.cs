@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Experimental;
 
 /// <summary>
-/// Creates and opens the dedicated TPM identity key used for attestation.
+/// Opens/creates an identity-style CNG key for the unsuccessful NCryptCreateClaim experiment.
 /// </summary>
 public sealed class AttestationKeyManager
 {

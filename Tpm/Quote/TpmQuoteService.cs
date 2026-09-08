@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Tpm2Lib;
 
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
 /// <summary>Creates an ephemeral Quote. Does not persist keys or alter PCRs.</summary>
 public sealed class TpmQuoteService

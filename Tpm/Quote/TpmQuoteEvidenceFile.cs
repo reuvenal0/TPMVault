@@ -1,4 +1,4 @@
-namespace TPMVault;
+namespace TPMVault.Tpm.Quote;
 
 /// <summary>Portable version-1 schema. All binary fields are Base64, never runtime objects.</summary>
 public sealed record TpmQuoteEvidenceFile

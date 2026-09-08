@@ -1,4 +1,4 @@
-namespace TPMVault;
+namespace TPMVault.Crypto;
 
 /// <summary>
 /// Represents a persisted key discovered in a CNG provider.

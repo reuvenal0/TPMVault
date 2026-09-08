@@ -1,7 +1,10 @@
+using TPMVault.Tpm.Quote;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using TPMVault;
 using Tpm2Lib;
+
+namespace TPMVault.Tests;
 
 internal static class QuoteEvidenceVerificationChecks
 {
@@ -87,6 +90,10 @@ internal static class QuoteEvidenceVerificationChecks
             string badPath = Path.Combine(directory, "invalid.json");
             File.WriteAllText(badPath, bad.ToJsonString());
             assert(new TpmVaultApp().Run(["verify-quote", badPath]) == 1, "offline CLI failure exit code");
+            string oversizedPath = Path.Combine(directory, "oversized.json");
+            File.WriteAllText(oversizedPath, new string(' ', 65537));
+            assert(new TpmVaultApp().Run(["verify-quote", oversizedPath]) == 1,
+                "offline CLI handles oversized evidence without an unhandled exception");
         }
         finally { Console.SetOut(previous); }
         assert(output.ToString().Contains("Quote evidence:    VERIFIED") && output.ToString().Split('\n')

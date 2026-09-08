@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace TPMVault;
+namespace TPMVault.Crypto;
 
 /// <summary>
 /// Runs small cryptographic demonstrations for the selected backend.
@@ -68,6 +68,7 @@ public sealed class CryptoDemoService
             $"Signature length: {signature.Length} bytes");
         Console.WriteLine(
             $"Signature valid:  {isValid}");
+        if (!isValid) throw new CryptographicException("RSA signature verification failed.");
     }
 
     private static void RunAesGcmTest()

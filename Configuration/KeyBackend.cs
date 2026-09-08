@@ -1,4 +1,4 @@
-namespace TPMVault;
+namespace TPMVault.Configuration;
 
 /// <summary>
 /// Defines the supported key storage backends.

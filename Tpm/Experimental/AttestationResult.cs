@@ -1,7 +1,7 @@
-namespace TPMVault;
+namespace TPMVault.Tpm.Experimental;
 
 /// <summary>
-/// Represents the result of a TPM platform attestation request.
+/// Captures experimental claim creation status, not verified attestation or device trust.
 /// </summary>
 public sealed record AttestationResult(
     bool Success,

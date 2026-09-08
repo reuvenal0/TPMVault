@@ -1,4 +1,4 @@
-namespace TPMVault;
+namespace TPMVault.Vault;
 
 /// <summary>
 /// Contains safe metadata about a vault entry without exposing its secret.
