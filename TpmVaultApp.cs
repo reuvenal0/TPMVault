@@ -49,6 +49,9 @@ public sealed class TpmVaultApp
                 "inspect" => HandleInspectCommand(args),
                 "delete-secret" => HandleDeleteSecretCommand(args),
                 "attest" => HandleAttestCommand(args),
+                "tpm-info" => HandleTpmReadCommand(args, readPcrs: false),
+                "pcrs" => HandleTpmReadCommand(args, readPcrs: true),
+                "quote" => HandleQuoteCommand(args),
                 _ => PrintUsageAndFail()
             };
         }
@@ -306,6 +309,88 @@ public sealed class TpmVaultApp
         return 0;
     }
 
+    private static int HandleTpmReadCommand(string[] args, bool readPcrs)
+    {
+        if (args.Length != 1)
+        {
+            return PrintUsageAndFail();
+        }
+
+        try
+        {
+            using var device = new TpmDeviceService();
+            if (readPcrs)
+            {
+                var pcrs = device.ReadSha256Pcrs();
+                Console.WriteLine("TPMVault - PCR Values");
+                Console.WriteLine("---------------------");
+                Console.WriteLine();
+                Console.WriteLine("Bank: SHA-256");
+                Console.WriteLine();
+                foreach (var pcr in pcrs)
+                {
+                    Console.WriteLine($"PCR {pcr.Key}: {pcr.Value}");
+                }
+            }
+            else
+            {
+                TpmInformation info = device.GetInformation();
+                Console.WriteLine("TPMVault - TPM Information");
+                Console.WriteLine("--------------------------");
+                Console.WriteLine("Connection:      OK");
+                Console.WriteLine("Interface:       Windows TBS");
+                Console.WriteLine("TPM 2.0 access:  Available");
+                Console.WriteLine($"Manufacturer:    0x{info.Manufacturer:X8}");
+                Console.WriteLine($"Firmware:        0x{info.FirmwareVersion1:X8} 0x{info.FirmwareVersion2:X8} (vendor-specific words)");
+            }
+            return 0;
+        }
+        // TSS.Net's TBS transport can throw plain Exception for context errors.
+        // Keep this boundary local to the new commands, preserving existing handlers.
+        catch (Exception ex)
+        {
+            Console.WriteLine("TPM 2.0 read through Windows TBS failed.");
+            Console.WriteLine($"{ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static int HandleQuoteCommand(string[] args)
+    {
+        if (args.Length != 1) return PrintUsageAndFail();
+        Console.WriteLine("TPMVault - TPM Quote");
+        Console.WriteLine("--------------------");
+        try
+        {
+            TpmQuoteEvidence evidence = new TpmQuoteService().CreateQuote();
+            TpmQuoteVerificationResult result = TpmQuoteVerifier.Verify(evidence, evidence.Nonce);
+            Console.WriteLine("Connection:      OK");
+            Console.WriteLine("PCR bank:        SHA-256");
+            Console.WriteLine("PCRs:            0, 2, 4, 7");
+            Console.WriteLine($"Nonce:           {Convert.ToHexString(evidence.Nonce)}");
+            Console.WriteLine("Quote created:   Yes");
+            Console.WriteLine("Transient key:   Flushed");
+            Console.WriteLine("\nVerification\n------------");
+            foreach (TpmQuoteCheck check in result.Checks)
+            {
+                Console.WriteLine($"{check.Name + ":",-18}{(check.Valid ? "Valid" : "FAILED")}");
+                if (check.Error is not null) Console.WriteLine($"  {check.Error}");
+            }
+            Console.WriteLine(result.Verified
+                ? "\nTPM quote:        VERIFIED\nLocal TPM Quote verified"
+                : "\nQuote created but verification failed");
+            return result.Verified ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex is TpmQuoteException { QuoteCreated: true }
+                ? "Quote created but verification failed (evidence collection or cleanup failed)."
+                : "Quote creation failed (evidence collection or cleanup may have failed).");
+            Console.WriteLine($"{ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+    }
+
     private int HandleAttestCommand(
         string[] args)
     {
@@ -554,5 +639,8 @@ public sealed class TpmVaultApp
             "  dotnet run -- delete-secret <software|tpm> <secret-name>");
         Console.WriteLine(
             "  dotnet run -- attest");
+        Console.WriteLine("  dotnet run -- tpm-info");
+        Console.WriteLine("  dotnet run -- pcrs");
+        Console.WriteLine("  dotnet run -- quote");
     }
 }
